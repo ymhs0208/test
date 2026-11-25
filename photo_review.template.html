@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="zh-Hant">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>伸縮縫歷史照片比對與 AI 複核</title>
+<style>
+  :root { color-scheme:light; --ink:#182c28; --muted:#50645d; --green:#0b6650; --dark:#112f2b; --line:#d9e3db; --surface:#fff; --bg:#eef1e9; --tint:#e2f1e7; font-family:Inter,"PingFang TC","Microsoft JhengHei",system-ui,sans-serif }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--ink); line-height:1.5 }
+  header { padding:18px max(20px,calc((100% - 1230px)/2)) 23px; background:var(--dark); color:white; border-bottom:4px solid #8cbb76 }
+  nav { display:flex; flex-wrap:wrap; gap:8px 18px; font-size:.88rem }
+  nav a { color:#c4e0ca; text-underline-offset:4px }
+  nav [aria-current] { color:white; font-weight:700; text-decoration:underline; text-underline-offset:4px }
+  h1,h2,h3,p { margin:0 }
+  h1 { font-size:clamp(1.55rem,4vw,2.45rem); margin-top:9px; line-height:1.22; letter-spacing:-.035em }
+  h2 { font-size:1.08rem }
+  h3 { font-size:.97rem }
+  .header-note { margin-top:4px; color:#c4e0ca; font-size:.88rem }
+  main { width:min(1230px,calc(100% - 36px)); margin:18px auto 36px; display:grid; gap:14px }
+  .panel { min-width:0; background:var(--surface); padding:15px 17px; border:1px solid var(--line); border-radius:11px }
+  .head,.fields,.row { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px 14px }
+  .fields,.row { justify-content:flex-start }
+  .fields { margin-top:8px }
+  .field { display:grid; gap:4px; color:var(--muted); font-size:.82rem; min-width:0 }
+  select,button,input { color:var(--ink); background:white; border:1px solid #b6c6bd; border-radius:6px; padding:6px 9px; font:inherit; font-size:.9rem; min-width:0; max-width:100% }
+  button { cursor:pointer }
+  button:disabled { cursor:default; opacity:.45 }
+  button:hover:not(:disabled) { background:var(--tint) }
+  button.primary { background:var(--green); border-color:var(--green); color:white }
+  button.primary:hover:not(:disabled) { background:#09523f }
+  :focus-visible { outline:2px solid var(--green); outline-offset:2px }
+  .muted { color:var(--muted); font-size:.84rem }
+  .comparison { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:12px }
+  .photo-pane { min-width:0; border-top:2px solid #abc5b4; padding-top:8px }
+  .photo-pane img { width:100%; height:clamp(160px,27vw,300px); object-fit:contain; display:block; background:#182823 }
+  .photo-open { display:block; margin-top:8px; padding:0; width:100%; overflow:hidden; background:#182823; border:none }
+  .details-line { margin-top:5px; overflow-wrap:anywhere }
+  .thumbs { display:flex; gap:7px; flex-wrap:wrap; margin-top:9px }
+  .thumbs button { padding:0; overflow:hidden; background:#182823; width:52px; height:39px }
+  .thumbs button[aria-pressed=true] { outline:2px solid var(--green); outline-offset:2px }
+  .thumbs img { width:100%; height:100%; object-fit:cover }
+  .rankings { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:11px }
+  .candidate { text-align:left; padding:6px; display:grid; gap:2px; background:#f7f9f6; line-height:1.35; min-width:0 }
+  .candidate[aria-pressed=true] { background:var(--tint); border-color:var(--green) }
+  .candidate img { width:100%; height:82px; object-fit:cover; display:block; border-radius:3px; background:#e4eae4 }
+  .candidate span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+  .pair-actions { margin-top:10px }
+  .joint-field { flex:1 1 240px }
+  .tool-footer { display:grid; gap:8px; margin-top:12px; padding-top:12px; border-top:1px solid var(--line) }
+  .audit p { margin-top:6px }
+  .audit table { border-collapse:collapse; margin-top:7px; font-size:.85rem; width:min(100%,560px) }
+  .audit th,.audit td { text-align:left; padding:5px 4px; border-bottom:1px solid var(--line) }
+  summary { cursor:pointer; font-weight:650 }
+  dialog { padding:12px; border:1px solid var(--line); border-radius:11px; max-width:95vw }
+  dialog::backdrop { background:#0c1e1be0 }
+  dialog img { width:auto; max-width:100%; max-height:75vh; margin-top:8px; display:block }
+  .elapsed { font-variant-numeric:tabular-nums }
+  @media(max-width:650px) {
+    main { width:calc(100% - 20px); margin-top:10px }
+    .panel { padding:12px }
+    .comparison { grid-template-columns:1fr }
+    .rankings { grid-template-columns:repeat(2,minmax(0,1fr)) }
+  }
+</style>
+<header>
+  <nav aria-label="原型功能"><a href="index.html">巡檢排序</a><span aria-current="page">照片複核</span></nav>
+  <h1>同一道縫，哪裡變了？</h1>
+  <p class="header-note" id="archive-status"></p>
+</header>
+<main>
+  <section class="panel" aria-labelledby="compare-title">
+    <div class="head"><h2 id="compare-title">同構件前後照片</h2><label class="field">橋梁與構件<select id="joint"></select></label></div>
+    <div class="comparison">
+      <article class="photo-pane">
+        <label class="field">前期檢測日期<select id="before"></select></label>
+        <div id="before-photo"></div>
+      </article>
+      <article class="photo-pane">
+        <label class="field">後期檢測日期<select id="after"></select></label>
+        <div id="after-photo"></div>
+      </article>
+    </div>
+    <div class="row pair-actions">
+      <button id="match" type="button">找前期相似照片</button><p class="muted" id="match-note" aria-live="polite"></p>
+    </div>
+    <div class="tool-footer">
+      <div class="row">
+        <label class="field">複核後期照片<select id="verdict"><option value="">選擇複核結果</option><option value="water">可見漏水跡象</option><option value="debris">可見雜物堆積</option><option value="damage">可見裝置損傷</option><option value="other">未見三類明顯跡象</option><option value="uncertain">無法判讀</option><option value="diagram">位置示意圖</option></select></label>
+        <button id="save" type="button">儲存複核</button>
+        <p class="muted" id="save-status" aria-live="polite"></p>
+      </div>
+    </div>
+  </section>
+  <section class="panel" aria-labelledby="pick-title">
+    <h2 id="pick-title">找出值得複核的照片</h2>
+    <div class="fields">
+      <label class="field">複核項目<select id="category"><option value="water">漏水</option><option value="debris">雜物堆積</option><option value="damage">裝置損傷</option></select></label>
+      <label class="field">瀏覽順序<select id="order"><option value="ai">AI 優先</option><option value="date">依日期瀏覽</option></select></label>
+      <label class="field">搜尋範圍<select id="scope"><option value="all">全部構件</option><option value="joint">目前構件</option></select></label>
+    </div>
+    <div class="tool-footer">
+      <div class="row">
+        <button id="timer" class="primary" type="button">開始找圖計時</button>
+        <button id="cancel-timer" type="button" hidden>取消計時</button>
+        <button id="export" type="button">匯出複核與計時 CSV</button>
+        <p id="timer-status" class="muted elapsed" role="status"></p>
+      </div>
+      <p class="muted" id="task-hint" hidden>點選找到的候選照片後，按「確認找到」記錄本次時間。</p>
+    </div>
+    <div class="rankings" id="candidates" aria-label="待複核照片"></div>
+    <div class="row pair-actions">
+      <button id="previous-page" type="button">上一頁</button><button id="next-page" type="button">下一頁</button>
+      <p class="muted" id="candidate-count" aria-live="polite"></p>
+    </div>
+  </section>
+  <section class="panel audit" id="audit"></section>
+</main>
+<dialog id="photo-dialog"><button id="close" type="button">關閉</button><img alt=""></dialog>
+<script type="application/json" id="photo-review-data">__PHOTO_REVIEW__</script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const data = JSON.parse($('photo-review-data').textContent);
+  const photos = data.photos;
+  const joints = new Map(data.joints.map((joint) => [joint.id, joint]));
+  const labels = {water:'漏水',debris:'雜物堆積',damage:'裝置損傷',other:'其他或未見三類明顯跡象'};
+  const classIndices = {water:0,debris:1,damage:2};
+  const pageSize = 8;
+  const storageKey = data.sample ? 'joint-photo-demo-v1' : 'joint-photo-local-v1';
+  let log = {reviews:{}, timings:[]};
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey));
+    if (saved?.reviews && Array.isArray(saved.timings)) log = saved;
+  } catch {}
+  let activeJoint;
+  let dates = [];
+  let selected = {before:null, after:null};
+  let currentPage = 0;
+  let timer = null;
+  const controls = [$('category'), $('order'), $('scope')];
+
+  function html(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) =>
+      ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
+  }
+  function saveLog() {
+    try { localStorage.setItem(storageKey, JSON.stringify(log)); return true; }
+    catch { return false; }
+  }
+  function setDates(control, choices, value) {
+    control.replaceChildren(...choices.map((date) => new Option(date, date)));
+    if (choices.includes(value)) control.value = value;
+    control.disabled = !choices.length;
+  }
+  function firstImage(day) {
+    const ids = activeJoint.dates[day] || [];
+    return ids.find((id) => !photos[id].diagram) ?? ids[0] ?? null;
+  }
+  function beforeDates(preferred) {
+    const choices = dates.filter((day) => day < $('after').value);
+    setDates($('before'), choices, preferred ?? choices.at(-1));
+    selected.before = firstImage($('before').value);
+  }
+  function setJoint(id, photo) {
+    activeJoint = joints.get(id);
+    $('joint').value = String(id);
+    dates = Object.keys(activeJoint.dates).sort();
+    const day = photo?.date ?? dates.at(-1);
+    setDates($('after'), dates, day);
+    selected.after = photo?.id ?? firstImage(day);
+    beforeDates();
+    $('match-note').textContent = '';
+    renderComparison();
+  }
+  function gradeText(grades) {
+    return grades.map((score,index) => score === null ? '' : `${'DERU'[index]} ${score}`).filter(Boolean).join(' · ');
+  }
+  function renderSide(side) {
+    const target = $(side + '-photo');
+    const id = selected[side];
+    if (id === null) {
+      target.innerHTML = '<p class="muted details-line">這個構件沒有更早的影像可比對。</p>';
+      return;
+    }
+    const photo = photos[id];
+    const records = activeJoint.dates[photo.date];
+    const description = data.sample ? '合成示意' : (photo.diagram ? '位置示意圖' : '檢測照片');
+    const thumbs = records.map((entry) => {
+      const option = photos[entry];
+      return `<button type="button" data-pick="${entry}" data-side="${side}" aria-pressed="${entry === id}" aria-label="${html(option.file)}"><img src="${html(option.src)}" alt="" loading="lazy"></button>`;
+    }).join('');
+    target.innerHTML = `
+      <button type="button" class="photo-open" data-enlarge="${id}" aria-label="放大${description}"><img src="${html(photo.src)}" alt="${html(photo.file)}"></button>
+      <p class="muted details-line">${html(description)} · ${html(photo.inspection)} · ${html(photo.file)}</p>
+      <p class="details-line">檢測紀錄 ${html(photo.label || '未記錄劣化類型')} <span class="muted">${html(gradeText(photo.grades))}</span></p>
+      ${photo.suggestion ? `<p class="muted">AI 複核提示 ${html(labels[photo.suggestion])}</p>` : ''}
+      <div class="thumbs">${thumbs}</div>`;
+  }
+  function renderComparison() {
+    renderSide('before');
+    renderSide('after');
+    $('match').disabled = photos[selected.after]?.matches?.[$('before').value] === undefined;
+    $('verdict').value = log.reviews[photos[selected.after]?.file]?.verdict || '';
+    $('save-status').textContent = '';
+  }
+  function renderCandidates() {
+    const mode = $('order').value;
+    const category = $('category').value;
+    const index = classIndices[category];
+    const scope = $('scope').value;
+    const pool = photos.filter((photo) => !photo.diagram && (scope === 'all' || photo.joint === activeJoint.id));
+    const byDate = (a,b) => b.date.localeCompare(a.date) || a.id - b.id;
+    pool.sort(mode === 'ai' ? (a,b) => b.scores[index] - a.scores[index] || byDate(a,b) : byDate);
+    const start = currentPage * pageSize;
+    const window = pool.slice(start,start + pageSize);
+    $('candidates').innerHTML = window.map((photo) => `
+      <button class="candidate" type="button" data-candidate="${photo.id}" aria-pressed="${selected.after === photo.id}">
+        <img src="${html(photo.src)}" alt="" loading="lazy">
+        <span>${html(joints.get(photo.joint).bridge)}</span>
+        <span class="muted">${photo.date} · ${html(photo.file)}</span>
+      </button>`).join('');
+    $('candidate-count').textContent = pool.length ? `第 ${start + 1}–${start + window.length} 張，共 ${pool.length} 張` : '無可用照片';
+    $('previous-page').disabled = currentPage === 0;
+    $('next-page').disabled = start + pageSize >= pool.length;
+  }
+  function syncCandidateSelection() {
+    for (const item of $('candidates').querySelectorAll('[data-candidate]')) {
+      item.setAttribute('aria-pressed', String(Number(item.dataset.candidate) === selected.after));
+    }
+  }
+  function renderAudit() {
+    const stats = data.stats;
+    const result = stats.validated;
+    let details = '<p class="muted">本次產出尚未匯入逐張核對結果。</p>';
+    if (data.sample) details = '<p class="muted">本頁使用合成示意圖與示範分數，可練習挑選照片、複核和計時。</p>';
+    if (result) {
+      const rows = Object.entries(result.classes);
+      const included = rows.reduce((sum,[,item]) => sum + item.n,0);
+      details = `<p class="muted">抽查 ${result.sampled} 張，排除位置示意與無法判讀影像後，${result.bridges} 座留出橋梁有 ${included} 張納入先導評估。判讀由助理逐張視覺初核，待工程人員覆核。</p>
+        <table><thead><tr><th scope="col">初核類別</th><th scope="col">樣本</th><th scope="col">AI 首選相符</th><th scope="col">原紀錄相符</th></tr></thead>
+        <tbody>${rows.map(([label,value]) => `<tr><th scope="row">${labels[label]}</th><td>${value.n}</td><td>${value.model}／${value.n}</td><td>${value.record}／${value.n}</td></tr>`).join('')}</tbody></table>
+        <p class="muted">在這批初核影像內，每類各看前 ${result.topLimit} 張，比較找到幾張符合該類。</p>
+        <table><thead><tr><th scope="col">複核項目</th><th scope="col">AI 優先</th><th scope="col">依日期</th></tr></thead>
+        <tbody>${rows.filter(([label]) => label !== 'other').map(([label,value]) => `<tr><th scope="row">${labels[label]}</th><td>${value.topAI}／${result.topLimit}</td><td>${value.topDate}／${result.topLimit}</td></tr>`).join('')}</tbody></table>
+        <p class="muted">樣本集中於三類病害，結果用於先導比較。</p>`;
+    }
+    $('audit').innerHTML = `<details><summary>驗證與資料來源</summary>
+      ${data.sample ? '' : `<p class="muted">以 Apple Vision 抽取影像特徵，使用由檢測紀錄提供的弱標籤訓練排序模型。訓練用 ${stats.train} 張，整座橋梁分組留出 ${stats.heldoutBridges} 座。偵測到的 ${stats.diagrams} 張位置示意圖只供查閱。</p>`}
+      ${details}<p class="muted">日期取自檢測紀錄，可能與照片上的拍攝時間不同。配對依整張影像的相似度，請核對角度與部位。計時比較宜使用相同找圖條件，並讓不同人交替嘗試兩種順序。</p></details>`;
+  }
+  $('joint').replaceChildren(...data.joints.map((joint) => new Option(`${joint.bridge} ｜ ${joint.position}`, joint.id)));
+  $('joint').addEventListener('change', () => { setJoint(Number($('joint').value)); currentPage = 0; renderCandidates(); });
+  $('after').addEventListener('change', () => {
+    selected.after = firstImage($('after').value);
+    beforeDates($('before').value);
+    $('match-note').textContent = '';
+    renderComparison();
+    syncCandidateSelection();
+  });
+  $('before').addEventListener('change', () => {
+    selected.before = firstImage($('before').value);
+    $('match-note').textContent = '';
+    renderComparison();
+  });
+  $('match').addEventListener('click', () => {
+    selected.before = photos[selected.after].matches[$('before').value];
+    renderSide('before');
+    $('match-note').textContent = '已選擇同構件、前期日期內影像相似度最高的一張。';
+  });
+  for (const side of ['before','after']) {
+    $(side + '-photo').addEventListener('click', (event) => {
+      const pick = event.target.closest('[data-pick]');
+      const enlarge = event.target.closest('[data-enlarge]');
+      if (pick) {
+        selected[side] = Number(pick.dataset.pick);
+        $('match-note').textContent = '';
+        renderComparison();
+        $(side + '-photo').querySelector(`[data-pick="${selected[side]}"]`)?.focus();
+        syncCandidateSelection();
+      }
+      if (enlarge) {
+        const photo = photos[Number(enlarge.dataset.enlarge)];
+        const image = $('photo-dialog').querySelector('img');
+        image.src = photo.src;
+        image.alt = photo.file;
+        $('photo-dialog').showModal();
+      }
+    });
+  }
+  $('close').addEventListener('click', () => $('photo-dialog').close());
+  for (const control of controls) control.addEventListener('change', () => { currentPage = 0; renderCandidates(); });
+  for (const [name,step] of [['previous-page',-1],['next-page',1]]) {
+    $(name).addEventListener('click', () => { currentPage += step; renderCandidates(); });
+  }
+  $('candidates').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-candidate]');
+    if (!button) return;
+    const photo = photos[Number(button.dataset.candidate)];
+    setJoint(photo.joint, photo);
+    syncCandidateSelection();
+    if (timer) timer.photo = photo.id;
+  });
+  $('save').addEventListener('click', () => {
+    const verdict = $('verdict').value;
+    if (!verdict) { $('save-status').textContent = '請先選擇複核結果。'; return; }
+    const photo = photos[selected.after];
+    log.reviews[photo.file] = {verdict, date:photo.date, bridge:activeJoint.bridge, time:new Date().toISOString()};
+    $('save-status').textContent = saveLog() ? '已儲存複核結果。' : '本頁已記錄，關閉前請匯出。';
+  });
+  function stopTimer(message) {
+    timer = null;
+    $('timer').textContent = '開始找圖計時';
+    $('cancel-timer').hidden = true;
+    $('task-hint').hidden = true;
+    for (const control of [...controls, $('joint')]) control.disabled = false;
+    $('timer-status').textContent = message;
+  }
+  $('timer').addEventListener('click', () => {
+    if (!timer) {
+      timer = {time:performance.now(), mode:$('order').value, category:$('category').value, photo:null,
+        scope:$('scope').value, joint:activeJoint.id};
+      currentPage = 0;
+      renderCandidates();
+      $('timer').textContent = '確認找到';
+      $('cancel-timer').hidden = false;
+      $('task-hint').hidden = false;
+      for (const control of controls) control.disabled = true;
+      $('joint').disabled = timer.scope === 'joint';
+      $('timer-status').textContent = '計時中';
+      return;
+    }
+    if (timer.photo === null) { $('timer-status').textContent = '計時中，請先點選找到的候選照片。'; return; }
+    const elapsed = (performance.now() - timer.time) / 1000;
+    log.timings.push({mode:timer.mode, category:timer.category, scope:timer.scope,
+      startJoint:timer.joint, file:photos[timer.photo].file, seconds:elapsed.toFixed(2), time:new Date().toISOString()});
+    const saved = saveLog();
+    stopTimer(`已記錄 ${elapsed.toFixed(2)} 秒。${saved ? '' : '關閉前請匯出。'}`);
+  });
+  $('cancel-timer').addEventListener('click', () => stopTimer('已取消本次計時。'));
+  $('export').addEventListener('click', () => {
+    const values = [['類型','照片編號','複核結果','檢測日期','橋梁','瀏覽順序','複核項目','搜尋範圍','起始構件','秒數','記錄時間']];
+    for (const [file, review] of Object.entries(log.reviews)) {
+      values.push(['複核',file,review.verdict,review.date,review.bridge,'','','','','',review.time]);
+    }
+    for (const run of log.timings) {
+      values.push(['計時',run.file,'','','',run.mode,run.category,run.scope,run.startJoint,run.seconds,run.time]);
+    }
+    const quoteCell = (value) => `"${String(value ?? '').replace(/"/g,'""')}"`;
+    const csv = '\uFEFF' + values.map((row) => row.map(quoteCell).join(',')).join('\r\n');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+    link.download = '伸縮縫照片複核與計時.csv';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href),1000);
+  });
+  $('archive-status').textContent = data.sample ? '合成資料示範 · 歷史照片比對與 AI 複核' :
+    `歷史照片比對與 AI 複核 · ${data.joints.length} 道構件 · ${photos.length.toLocaleString('zh-TW')} 張影像與位置示意圖`;
+  const primary = data.joints.find((item) => Object.keys(item.dates).length > 1) ?? data.joints[0];
+  setJoint(primary.id);
+  renderCandidates();
+  renderAudit();
+})();
+</script>
+</html>

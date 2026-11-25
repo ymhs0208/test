@@ -9,3 +9,4 @@ local-output/
 *.jpg
 *.jpeg
 *.pdf
+.photo-review-local/

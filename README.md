@@ -28,3 +28,18 @@ python build.py --source "/path/to/authorized-data"
 ## 回測
 
 模型使用年初以前可取得的檢測資料。它以同類檢測中出現新增劣化類型或最高 D 上升為命中。當年缺少同類檢測的候選項目列為未觀察。打開頁面底部的「回測方法與資料」可查看基準與訓練設計。
+
+## 歷史照片比對與 AI 複核
+
+從首頁選「照片複核」，或在瀏覽器直接開啟 `photo-review.html`。選擇構件與前後日期可比對照片，亦可切換「AI 優先」和「依日期瀏覽」，儲存複核結果及匯出找圖計時 CSV。公開頁使用獨立產生的合成示意圖和示範分數，可用 `python demo_photo.py` 重新產生。
+
+有授權資料時，在裝有 Apple Vision 與 Swift 的 macOS 上執行：
+
+```bash
+python build.py --source "/path/to/authorized-data"
+python build_photo_review.py --source "/path/to/authorized-data"
+```
+
+開啟 `local-output/photo-review.html`。若另有逐張複核標記，可用 `--annotations` 指定 JSON，格式為照片檔名（省略副檔名）對應 `water`、`debris`、`damage`、`other`、`uncertain` 或 `diagram`。驗證僅採用按橋梁名稱分組後留出的照片。影像特徵快取與本機成果均已設定由 Git 忽略。
+
+找圖比較時，先選好同一複核項目、搜尋範圍和目標，在任一排序下按「開始找圖計時」。找到後點選照片並按「確認找到」。正式試用可交替兩種排序以控制練習效應，並以匯出的照片 ID 核對是否成功。
