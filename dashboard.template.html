@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="zh-Hant">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>國道一號伸縮縫巡檢排序</title>
+<style>
+  :root { color-scheme: light; --ink:#172b29; --muted:#526461; --line:#dce4e0; --paper:#fff; --bg:#eef1e9; --green:#0c6551; --tint:#e1f1e7; --amber:#81511a; font-family:Inter,"PingFang TC","Microsoft JhengHei",system-ui,sans-serif }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--ink); line-height:1.55 }
+  header { background:#112f2b; color:#fff; padding:24px max(22px,calc((100% - 1240px)/2)); border-bottom:4px solid #8cbb76 }
+  .route { color:#bfdec7; font-size:.82rem; letter-spacing:.12em }
+  h1,h2,h3,p { margin:0 }
+  h1 { font-size:clamp(1.65rem,4vw,2.6rem); line-height:1.25; margin-top:4px; letter-spacing:-.035em }
+  h2 { font-size:1.09rem }
+  h3 { font-size:1.43rem; line-height:1.28 }
+  main { width:min(1240px,calc(100% - 44px)); margin:22px auto 40px }
+  .panel { background:var(--paper); border:1px solid var(--line); border-radius:13px; min-width:0 }
+  .overview,.section-head,.component,.method { padding:16px 20px }
+  .toolbar,.section-head,.legend,.headline { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap }
+  .toolbar { padding-bottom:14px; border-bottom:1px solid var(--line) }
+  .fields { display:flex; flex-wrap:wrap; gap:8px 16px }
+  label { color:var(--muted); font-size:.84rem }
+  select { background:#fff; font:inherit; color:var(--ink); border:1px solid #b8c8bc; border-radius:6px; padding:5px 8px; margin-left:5px }
+  .muted { color:var(--muted); font-size:.86rem }
+  .summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 28px; margin-top:13px }
+  .headline { justify-content:flex-start; gap:8px }
+  .headline strong { font-size:1.66rem; line-height:1.2; font-variant-numeric:tabular-nums }
+  .track { display:flex; height:8px; background:#e9ede8; border-radius:10px; overflow:hidden; margin:7px 0 5px }
+  .track>.found { background:#247760 }
+  .track>.unknown { background:repeating-linear-gradient(135deg,#d4b890 0 3px,#f2e6d3 3px 6px) }
+  .legend { justify-content:flex-start; margin-top:11px }
+  .workbench { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); gap:16px; align-items:start; margin-top:16px }
+  .section-head { border-bottom:1px solid var(--line) }
+  .list { list-style:none; margin:0; padding:0; display:grid }
+  .list li + li { border-top:1px solid var(--line) }
+  .list li:last-child button { border-radius:0 0 12px 12px }
+  .rank-btn { width:100%; border:0; background:none; text-align:left; display:grid; grid-template-columns:2ch minmax(0,1fr) auto; align-items:center; gap:12px; color:var(--ink); padding:10px 17px; min-height:53px; font:inherit; cursor:pointer }
+  .rank-btn:hover { background:#f1f6f2 }
+  .rank-btn[aria-pressed="true"] { background:var(--tint); box-shadow:inset 3px 0 var(--green) }
+  :focus-visible { outline:2px solid var(--green); outline-offset:-2px }
+  .rank { color:var(--muted); font-variant-numeric:tabular-nums }
+  .joint-name { display:block; font-weight:650; overflow-wrap:anywhere }
+  .joint-pos { display:block; color:var(--muted); font-size:.78rem }
+  .score { color:var(--green); font-variant-numeric:tabular-nums; font-weight:650; white-space:nowrap }
+  .component { display:grid; gap:12px }
+  .component section { border-top:1px solid var(--line); padding-top:10px }
+  .component section h4 { margin:0 0 5px; font-size:.93rem }
+  .side-score { color:var(--green); font-size:1.24rem; font-weight:700 }
+  .reasons { margin:3px 0 0; padding-left:20px; font-size:.88rem }
+  .result { padding:9px 12px; background:var(--tint); color:#154b3a; border-radius:7px; font-size:.87rem }
+  .result[data-status="unknown"] { background:#f5eddf; color:var(--amber) }
+  .result[data-status="stable"] { background:#edf0ed; color:var(--ink) }
+  details { border-top:1px solid var(--line); padding:8px 0; font-size:.88rem }
+  details:first-of-type { border-top:0 }
+  summary { cursor:pointer; font-weight:650 }
+  .images { margin-top:8px; display:grid; grid-template-columns:repeat(auto-fill,minmax(min(118px,100%),1fr)); gap:7px }
+  .images button { border:0; padding:0; background:#edf2ed; border-radius:6px; overflow:hidden; cursor:pointer }
+  .images img { width:100%; aspect-ratio:4/3; object-fit:cover; display:block }
+  .observation { margin:5px 0 8px }
+  .method { margin-top:16px }
+  .method details { padding:0 }
+  .method ul { margin:8px 0 0; padding-left:20px }
+  dialog { border:1px solid var(--line); border-radius:12px; padding:12px; background:#fff; color:var(--ink); max-width:95vw }
+  dialog::backdrop { background:#0c1f1be0 }
+  dialog img { display:block; max-width:100%; max-height:76vh; margin:8px auto 0; object-fit:contain }
+  dialog button { font:inherit; border:1px solid #b8c8bc; border-radius:6px; background:#fff; padding:4px 9px; cursor:pointer }
+  [hidden] { display:none !important }
+  @media (max-width:740px) {
+    main { width:calc(100% - 24px); margin-top:12px }
+    header { padding:18px 14px }
+    .workbench { grid-template-columns:1fr; gap:12px }
+    .overview,.section-head,.component,.method { padding:13px }
+    .rank-btn { padding:9px 12px; gap:8px }
+  }
+</style>
+<header>
+  <div class="route">國道 1 號 · 林口至新竹系統</div>
+  <h1>伸縮縫巡檢排序</h1>
+</header>
+<main>
+  <section class="panel overview" aria-labelledby="validation-title">
+    <div class="toolbar">
+      <div><h2 id="validation-title">2025 年歷史回測</h2><p class="muted">以 2025 年 1 月 1 日可取得的歷史檢測資料排序</p></div>
+      <div class="fields">
+        <label>檢測類型<select id="kind"><option>平時檢測</option><option>定期檢測</option></select></label>
+        <label>巡檢量<select id="budget"><option>5</option><option selected>10</option><option>15</option><option>20</option><option>30</option><option>50</option></select> 道</label>
+      </div>
+    </div>
+    <div class="summary" id="metrics" aria-live="polite"></div>
+    <div class="legend muted" id="coverage"></div>
+  </section>
+  <div class="workbench">
+    <section class="panel" aria-labelledby="ranking-title">
+      <div class="section-head">
+        <h2 id="ranking-title">優先巡檢清單</h2>
+        <label>排序方式<select id="ordering"><option value="model">模型</option><option value="baseline">上次 D 優先</option></select></label>
+      </div>
+      <ol class="list" id="ranking"></ol>
+    </section>
+    <article class="panel component" id="component" aria-label="構件詳情"></article>
+  </div>
+  <section class="panel method">
+    <details>
+      <summary>回測方法與資料</summary>
+      <ul>
+        <li>每個年度年初、每道伸縮縫及每種檢測類型各產生一筆排序資料。2022–2024 年共 <span id="training-count"></span> 筆有追蹤結果的構件年度樣本，用其截止日前的歷史特徵訓練 L2 邏輯斯迴歸。</li>
+        <li>2025 年沿用同一模型和排序規則。基準依上次最高 D 由高至低排列，再依上次同類檢測日期由舊至新及構件 ID 由小至大排列。</li>
+        <li>以 2025 年首次同類檢測比較上次紀錄。最高 D 上升或新增劣化類型即計一次命中。當年缺少同類檢測結果者列為未觀察。</li>
+        <li>新增記錄受檢測方式和間隔影響。模型分數用於比較優先順序，畫面中的「2025 年追蹤結果」僅供歷史驗證。可加分的特徵是相對訓練平均值的模型貢獻。</li>
+        <li>來源為高公局競賽提供的橋梁基本資料、檢測紀錄和檢測照片。里程是橋頭所在里程。模型使用檢測歷程。</li>
+      </ul>
+    </details>
+  </section>
+</main>
+<dialog id="photo-viewer">
+  <div class="headline"><button type="button" id="close-photo">關閉照片</button><span id="photo-caption" class="muted"></span></div>
+  <img id="photo-full" alt="">
+</dialog>
+<script type="application/json" id="snapshot">__SNAPSHOT__</script>
+<script>
+  const byId = (id) => document.getElementById(id);
+  const data = JSON.parse(byId('snapshot').textContent);
+  const kind = byId('kind');
+  const budget = byId('budget');
+  const ordering = byId('ordering');
+  const ranking = byId('ranking');
+  const component = byId('component');
+  const photoViewer = byId('photo-viewer');
+  const scoreText = (score) => `${Math.round(score * 100)} 分`;
+  const gradeNames = ['D', 'E', 'R', 'U'];
+  let currentRows = [];
+  let selectedId = null;
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) =>
+      ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
+  }
+
+  function metrics(label, rows) {
+    const found = rows.filter((item) => item.target === 1).length;
+    const unknown = rows.filter((item) => item.target === null).length;
+    const stable = rows.length - found - unknown;
+    return `<div><div class="headline"><strong>${found} / ${rows.length}</strong><span>${label}命中</span></div>
+      <div class="track" aria-hidden="true"><span class="found" style="width:${100 * found/rows.length}%"></span><span class="unknown" style="width:${100 * unknown/rows.length}%"></span></div>
+      <p class="muted">未命中 ${stable} 道 · 未觀察 ${unknown} 道</p></div>`;
+  }
+
+  function inspectionRows(inspection) {
+    return inspection.rows.map((row) => {
+      const label = row.defect ?? '未記錄劣化類型';
+      const grades = row.grades.map((grade, index) => grade === null ? '' : `${gradeNames[index]} ${grade}`).filter(Boolean).join(' · ');
+      const photos = row.photos.map((src, index) => {
+        const caption = `${inspection.date}　${label}　照片 ${index + 1}`;
+        return `<button type="button" data-photo="${escapeHtml(src)}" data-caption="${escapeHtml(caption)}" aria-label="放大 ${escapeHtml(caption)}"><img src="${escapeHtml(src)}" alt="${escapeHtml(label)}照片" loading="lazy"></button>`;
+      }).join('');
+      return `<div class="observation">${escapeHtml(label)}<span class="muted">　${escapeHtml(grades)}</span>${photos ? `<div class="images">${photos}</div>` : ''}</div>`;
+    }).join('');
+  }
+
+  function followUp(item) {
+    if (!item.future) return '<div class="result" data-status="unknown">2025 年追蹤結果　未觀察到同類檢測</div>';
+    const changed = [
+      item.future.grades[0] > item.d ? `最高 D 由 ${item.d} 升至 ${item.future.grades[0]}` : '',
+      item.newDefects.length ? `新增 ${item.newDefects.join('、')}` : '',
+    ].filter(Boolean);
+    const label = changed.length ? changed.join('；') : '最高 D 未上升，無新增劣化類型';
+    return `<section><h4>2025 年追蹤結果</h4><div class="result" data-status="${item.target ? 'changed' : 'stable'}">
+      ${item.future.date}　${escapeHtml(label)}</div>
+      <details><summary>查看當日檢測與照片</summary>${inspectionRows(item.future)}</details></section>`;
+  }
+
+  function renderDetail(item) {
+    const history = [...item.history].reverse().map((inspection, index) =>
+      `<details ${index === 0 ? 'open' : ''}><summary>${inspection.date}　最高 D ${inspection.grades[0]}</summary>
+        ${inspectionRows(inspection)}</details>`).join('');
+    const reasons = item.reasons.map(({label, value}) => `<li>${escapeHtml(label)}　${escapeHtml(value)}</li>`).join('');
+    component.innerHTML = `
+      <div class="headline"><div><h3>${escapeHtml(item.name)}</h3><p class="muted">${escapeHtml(item.position)} · 橋頭 ${item.km.toFixed(3)} km · 構件 ${item.id}</p></div></div>
+      <section><h4>排序依據</h4>
+        <div class="headline"><span class="side-score">${ordering.value === 'model' ? scoreText(item.score) : `D ${item.d}`}</span>
+        <span class="muted">${ordering.value === 'model' ? '模型分數' : '上次最高 D'} · 上次同類檢測 ${item.last}</span></div>
+        ${ordering.value === 'model' ? (reasons ? `<ul class="reasons">${reasons}</ul>` : '<p class="muted">沒有明顯推高分數的單一特徵。</p>') : ''}
+      </section>
+      ${followUp(item)}
+      <section><h4>排序當時可用的同類檢測</h4>${history}</section>`;
+  }
+
+  function selectItem(item) {
+    selectedId = item.id;
+    for (const button of ranking.querySelectorAll('button')) {
+      button.setAttribute('aria-pressed', String(Number(button.dataset.id) === selectedId));
+    }
+    renderDetail(item);
+  }
+
+  function render() {
+    const { rows, baseline } = data.byKind[kind.value];
+    const rowById = new Map(rows.map((row) => [row.id, row]));
+    const limit = Number(budget.value);
+    const modelRows = rows.slice(0, limit);
+    const baselineRows = baseline.slice(0, limit).map((id) => rowById.get(id));
+    byId('metrics').innerHTML = metrics('模型', modelRows) + metrics('上次 D 優先', baselineRows);
+    const observed = rows.filter((item) => item.target !== null).length;
+    const found = rows.filter((item) => item.target === 1).length;
+    byId('coverage').textContent = `候選 ${rows.length} 道 · 有同類追蹤 ${observed} 道 · 實際記錄到變化 ${found} 道`;
+    currentRows = ordering.value === 'model' ? modelRows : baselineRows;
+    ranking.innerHTML = currentRows.map((item, index) => `<li><button type="button" class="rank-btn" data-id="${item.id}" aria-pressed="false">
+      <span class="rank">${index + 1}</span>
+      <span><span class="joint-name">${escapeHtml(item.name)}</span><span class="joint-pos">${escapeHtml(item.position)} · 構件 ${item.id}</span></span>
+      <span class="score">${ordering.value === 'model' ? scoreText(item.score) : `D ${item.d}`}</span></button></li>`).join('');
+    const selected = currentRows.find((row) => row.id === selectedId);
+    selectItem(selected ?? currentRows[0]);
+  }
+
+  ranking.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-id]');
+    if (button) selectItem(currentRows.find((row) => row.id === Number(button.dataset.id)));
+  });
+  component.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-photo]');
+    if (!button) return;
+    byId('photo-full').src = button.dataset.photo;
+    byId('photo-full').alt = button.dataset.caption;
+    byId('photo-caption').textContent = button.dataset.caption;
+    photoViewer.showModal();
+  });
+  byId('close-photo').addEventListener('click', () => photoViewer.close());
+  for (const control of [kind, budget, ordering]) control.addEventListener('change', render);
+  byId('training-count').textContent = data.training;
+  render();
+</script>
+</html>

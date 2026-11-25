@@ -1,0 +1,65 @@
+<section id="joint-backtest-viz" aria-labelledby="joint-backtest-title">
+  <style>
+    #joint-backtest-viz { display:grid; gap:calc(var(--font-size-base,14px) * 1) }
+    #joint-backtest-viz .method-bars { display:grid; gap:10px }
+    #joint-backtest-viz .mark-label { display:flex; justify-content:space-between; flex-wrap:wrap; gap:4px 12px }
+    #joint-backtest-viz .mark-track { display:flex; height:10px; margin-top:4px; overflow:hidden; border-radius:6px; background:var(--muted) }
+    #joint-backtest-viz .mark-track span { transition:width 180ms ease }
+    #joint-backtest-viz .hits { background:var(--viz-series-1) }
+    #joint-backtest-viz .unknown { background:repeating-linear-gradient(135deg,var(--viz-series-3) 0 2px,transparent 2px 5px) }
+    @media (prefers-reduced-motion:reduce) { #joint-backtest-viz .mark-track span { transition:none } }
+  </style>
+  <h2 id="joint-backtest-title">2025 年巡檢排序回測</h2>
+  <div class="viz-controls">
+    <label class="form-label">檢測類型 <select class="form-select" data-kind><option>平時檢測</option><option>定期檢測</option></select></label>
+    <label class="form-label">優先巡檢量 <select class="form-select" data-limit><option>5</option><option selected>10</option><option>15</option><option>20</option><option>30</option><option>50</option></select></label>
+  </div>
+  <div class="method-bars" aria-live="polite">
+    <div data-method>
+      <div class="mark-label"><span>模型排序</span><span class="tabular-nums" data-label></span></div>
+      <div class="mark-track" aria-hidden="true"><span class="hits"></span><span class="unknown"></span></div>
+    </div>
+    <div data-method>
+      <div class="mark-label"><span>上次 D 優先</span><span class="tabular-nums" data-label></span></div>
+      <div class="mark-track" aria-hidden="true"><span class="hits"></span><span class="unknown"></span></div>
+    </div>
+  </div>
+  <p class="text-small text-muted" data-coverage></p>
+  <script>
+    (() => {
+      const root = document.getElementById('joint-backtest-viz');
+      const summary = __SUMMARY__;
+      const kind = root.querySelector('[data-kind]');
+      const limit = root.querySelector('[data-limit]');
+      const methods = [...root.querySelectorAll('[data-method]')];
+      const coverage = root.querySelector('[data-coverage]');
+      function draw() {
+        const count = Number(limit.value);
+        const view = summary[kind.value];
+        methods.forEach((method, index) => {
+          const [hits, unknown] = view.counts[count - 1][index];
+          method.querySelector('[data-label]').textContent =
+            `命中 ${hits}／${count} 道 · 未觀察 ${unknown} 道`;
+          method.querySelector('.hits').style.width = `${100 * hits / count}%`;
+          method.querySelector('.unknown').style.width = `${100 * unknown / count}%`;
+        });
+        coverage.textContent = `候選 ${view.candidates} 道 · 有同類追蹤 ${view.observed} 道 · 記錄到變化 ${view.positives} 道`;
+      }
+      function restore(state) {
+        const settings = state?.privateContent;
+        if (settings?.kind in summary) kind.value = settings.kind;
+        if ([...limit.options].some((option) => option.value === settings?.limit)) limit.value = settings.limit;
+        draw();
+      }
+      function update() {
+        draw();
+        window.openai?.setWidgetState?.({
+          privateContent: {kind: kind.value, limit: limit.value},
+        })?.catch(() => {});
+      }
+      for (const control of [kind, limit]) control.addEventListener('change', update);
+      window.addEventListener('openai:set_globals', (event) => restore(event.detail.globals.widgetState));
+      restore(window.openai?.widgetState);
+    })();
+  </script>
+</section>
